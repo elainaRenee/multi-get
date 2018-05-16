@@ -4,16 +4,24 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.ArrayUtils;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URL;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import static com.github.Utils.exit;
+import static com.github.Utils.exitOnFatalError;
 import static com.github.Utils.getFileName;
 
+/* downloads part of a file, making a new request for each chunk */
+
 public class Download {
+
+    private final static Logger LOGGER = Logger.getLogger(Download.class.getName());
 
     private final URL downloadUrl; // required
     private final String outputFile; // optional
@@ -46,12 +54,12 @@ public class Download {
         }
 
         public DownloadBuilder outputFile(String outputFile) {
-            this.outputFile = outputFile != null || !outputFile.isEmpty() ? getFileName(this.downloadUrl) : outputFile;
+            this.outputFile = outputFile != null && !outputFile.isEmpty() ? outputFile : getFileName(this.downloadUrl);
             return this;
         }
 
         public DownloadBuilder chunkSize(int chunkSize) {
-            this.chunkSize = chunkSize == 0 ? DEFAULT_CHUNK_SIZE : chunkSize;;
+            this.chunkSize = chunkSize == 0 ? DEFAULT_CHUNK_SIZE : chunkSize * DEFAULT_CHUNK_SIZE;;
             return this;
         }
 
@@ -90,8 +98,11 @@ public class Download {
         return parallel;
     }
 
+    /**
+     * downloads chunks either sequentially or in parallel and saves to disk
+     */
     public void start() {
-
+        LOGGER.log(Level.INFO, "Started download at " + Instant.now());
         // results in memory from each download chunk
         byte[][] downloads = new byte[getChunks()][];
         int startByte = 0;
@@ -102,12 +113,12 @@ public class Download {
             ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(getChunks());
             CompletionService<Chunk> completionService = new ExecutorCompletionService<Chunk>(executor);
 
-            // keeps track of futures so we can cancel them if there is an error
+            // keeps track of futures
             List<Future<Chunk>> futures = new ArrayList<Future<Chunk>>();
 
             // create thread for each chunk and start downloads
             for(int i = 0; i < chunks; i++) {
-                int endByte = startByte + this.chunkSize - 1;
+                int endByte = startByte + this.chunkSize;
                 DownloadCallable callable = new DownloadCallable(i, getDownloadUrl(), startByte, endByte);
                 futures.add(completionService.submit(callable));
                 startByte = endByte + 1;
@@ -121,47 +132,36 @@ public class Download {
                     downloads[chunk.getPosition()] = chunk.getChunk();
                     futures.remove(resultFuture);
                 } catch (InterruptedException e) {
-                    // TODO: add error handling
-                    e.printStackTrace();
-                    errors = true;
+                    int completeFutures = getChunks() - futures.size();
+                    exitOnFatalError("Error in downloading chunks. " + completeFutures + " of " + getChunks() + " downloads were successful", e);
+                    return;
                 } catch (ExecutionException e) {
-                    // TODO: add error handling
-                    e.printStackTrace();
-                    errors = true;
-                }
-            }
-
-            // cancel any remaining futures if an error occurs
-            if (errors) {
-                for(Future<Chunk> future : futures) {
-                    future.cancel(true);
+                    int completeFutures = getChunks() - futures.size();
+                    exitOnFatalError("Error in downloading chunks. " + completeFutures + " of " + getChunks() + " downloads were successful", e);
+                    return;
                 }
             }
 
             executor.shutdown();
         } else {
+            // download chunks sequentially
+
             for(int i = 0; i < chunks; i++) {
                 int endByte = startByte + this.chunkSize;
+
                 DownloadCallable callable = new DownloadCallable(i, getDownloadUrl(), startByte, endByte);
                 Chunk chunk = null;
                 try {
                     chunk = callable.call();
                 } catch (Exception e) {
-                    // TODO: add error handling
-                    e.printStackTrace();
-                    errors = true;
+                    exitOnFatalError("Error in downloading chunk " + i, e);
                 }
                 downloads[i] = chunk.getChunk();
-
-                if (errors)
-                    break;
+                startByte = endByte + 1;
             }
         }
 
-        if (errors) {
-            // TODO: create new method for exit
-            exit("Error occured in downloading file. Please try again");
-        }
+        LOGGER.log(Level.INFO, "Merging chunks");
 
         // merge chunks
         byte[] finalResult = null;
@@ -169,16 +169,25 @@ public class Download {
             finalResult = ArrayUtils.addAll(finalResult, download);
         }
 
+        LOGGER.log(Level.INFO, "Saving chunks to file");
+
         createFile(finalResult);
+
+        LOGGER.log(Level.INFO, "Finished download at " + Instant.now());
     }
 
+    /**
+     * creates and saves a file to the current directory
+     * @param bytes
+     */
     private void createFile(byte[] bytes) {
         File file = new File(getOutputFile());
         try {
             FileUtils.writeByteArrayToFile(file, bytes, 0, getChunks() * getChunkSize());
+        } catch (FileNotFoundException e) {
+            exitOnFatalError("Problem saving download with file name. Please try a different file name", e);
         } catch (IOException e) {
-            // TODO: add error handling
-            e.printStackTrace();
+            exitOnFatalError("Error saving file. Please try again.", e);
         }
     }
 

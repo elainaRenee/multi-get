@@ -3,11 +3,21 @@ package com.github;
 import org.apache.commons.io.IOUtils;
 
 import java.io.InputStream;
+import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.concurrent.Callable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
+import static com.github.Utils.exitOnFatalError;
+
+/**
+ * downloads part of a file
+ */
 public class DownloadCallable implements Callable<Chunk> {
+
+    private final static Logger LOGGER = Logger.getLogger(DownloadCallable.class.getName());
 
     public final int position;
     public final URL url;
@@ -37,7 +47,14 @@ public class DownloadCallable implements Callable<Chunk> {
         return endByte;
     }
 
+    /**
+     * downloads part of a file using a range request
+     * @return downloaded chunk
+     * @throws Exception
+     */
     public Chunk call() throws Exception {
+        LOGGER.log(Level.INFO, "Downloading chunk " + getPosition() + " starting at byte " + startByte + " and ending at byte " + endByte);
+
         byte[] chunkArray = null;
         try {
             // Connect to the URL
@@ -47,22 +64,22 @@ public class DownloadCallable implements Callable<Chunk> {
             String byteRange = startByte + "-" + endByte;
             conn.setRequestProperty("Range", "bytes=" + byteRange);
 
-            // check for valid response code
-            int code = conn.getResponseCode();
-            //if (code / 100 != 2)
-
-
             // get the input stream
             InputStream in = conn.getInputStream();
-            long size = endByte - startByte;
 
+            // get byte size
+            long size = endByte - startByte;
 
             chunkArray = IOUtils.toByteArray(in, size);
 
+        } catch (ConnectException e) {
+            exitOnFatalError("Unable to connect to URL", e);
+
         } catch (Exception e) {
-            // TODO: throw runtime exception
-            e.printStackTrace();
+            exitOnFatalError("Error occurred in requesting chunk " + getPosition() + " from URL " + url, e);
         }
+
+        LOGGER.log(Level.INFO, "Finished downloading chunk " + getPosition() + " starting at byte " + startByte + " and ending at byte " + endByte);
 
         return new Chunk(chunkArray, getPosition());
     }

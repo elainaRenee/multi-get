@@ -5,10 +5,16 @@ import org.apache.commons.cli.*;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import static com.github.Utils.exit;
+import static com.github.Utils.exitOnInvalidParameter;
+
+/* takes command line arguments and beings the download process */
 
 public class Main {
+
+    private final static Logger LOGGER = Logger.getLogger(Main.class.getName());
 
     public static void main(String[] args) {
 
@@ -38,8 +44,13 @@ public class Main {
         parallelOption.setRequired(false);
         options.addOption(parallelOption);
 
+        // add option for help
+        Option helpOption = new Option("h", "help", false, "print help message");
+        helpOption.setRequired(false);
+        options.addOption(helpOption);
+
         // useful instructions for help option
-        String header = "Download a part of a file in chunks\n\n";
+        String header = "Download part of a file in chunks\n\n";
         String footer = "\nPlease report issues at https://github.com/elainaRenee/multi-get/issues";
 
         HelpFormatter formatter = new HelpFormatter();
@@ -49,33 +60,36 @@ public class Main {
         try {
             // parse command line arguments
             cmd = parser.parse(options, args);
+            // print help message if help argument is passed
+            if (cmd.hasOption("help")) {
+                formatter.printHelp("java -jar multiget.jar [OPTIONS] <URL>", header, options, footer);
+                return;
+            }
         } catch (ParseException e) {
             // print help message on error
-            System.out.println(e.getMessage());
-            formatter.printHelp("java -jar multiget [OPTIONS] <URL>", header, options, footer);
-            System.exit(1);
+            exitOnInvalidParameter("Error in parsing command line arguments.");
             return;
         }
+
+        LOGGER.log(Level.INFO, "Validating command line arguments");
 
         // get URL
         List<String> unparsedArgs = cmd.getArgList();
         if (unparsedArgs.size() < 1) {
-            // TODO: need error logging
-            exit("Please enter a value for URL.");
+            exitOnInvalidParameter("Please enter a value for URL.");
             return;
         } else if (unparsedArgs.size() > 1) {
-            // TODO: need error logging
-            exit("Please enter only one value for URL.");
+            exitOnInvalidParameter("Please enter a valid URL.");
             return;
         }
 
+        // check to make sure URL is valid
         URL downloadUrl;
         try {
             downloadUrl = new URL(unparsedArgs.get(0));
+            LOGGER.log(Level.INFO, "Download URL: " + downloadUrl);
         } catch (MalformedURLException e) {
-            // TODO: need error logging
-            System.out.println(e.getMessage());
-            exit("Please enter a valid URL.");
+            exitOnInvalidParameter("Please enter a valid URL.", e);
             return;
         }
 
@@ -87,23 +101,25 @@ public class Main {
         try {
             if (cmd.hasOption("chunks")) {
                 chunks = ((Number)cmd.getParsedOptionValue("chunks")).intValue();
+                LOGGER.log(Level.INFO, "Chunks: " + chunks);
             }
 
-            if(cmd.hasOption("chunkSize")) {
-                chunkSize = ((Number)cmd.getParsedOptionValue("chunkSize")).intValue();
+            if(cmd.hasOption("size")) {
+                chunkSize = ((Number)cmd.getParsedOptionValue("size")).intValue();
+                LOGGER.log(Level.INFO, "Chunk Size: " + chunkSize);
             }
 
             if (cmd.hasOption("parallel")) {
                 parallel = true;
+                LOGGER.log(Level.INFO, "Parallel: " + parallel);
             }
 
             if (cmd.hasOption("file")) {
                 outputFile = cmd.getParsedOptionValue("file").toString();
+                LOGGER.log(Level.INFO, "Output File: " + outputFile);
             }
         } catch (ParseException e) {
-            // TODO: need error logging
-            System.out.println(e.getMessage());
-            exit("One or more arguments have invalid options.");
+            exitOnInvalidParameter("One or more arguments have invalid options.", e);
             return;
         }
 

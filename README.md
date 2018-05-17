@@ -22,6 +22,12 @@ Download part of a file in chunks
 
 Please report issues at https://github.com/elainaRenee/multi-get/issues
 ```
+## Exit Codes
+```
+-1 - Invalid parameter
+ 0 - Success
+ 1 - Fail
+```
 ## Testing
 ```
 $ mvn clean test

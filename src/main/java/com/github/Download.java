@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.logging.Level;
@@ -105,7 +106,7 @@ public class Download {
         LOGGER.log(Level.INFO, "Started download at " + Instant.now());
         // results in memory from each download chunk
         byte[][] downloads = new byte[getChunks()][];
-        int startByte = 0;
+        long startByte = 0;
         boolean errors = false;
 
         if (isParallel()) {
@@ -118,7 +119,7 @@ public class Download {
 
             // create thread for each chunk and start downloads
             for(int i = 0; i < chunks; i++) {
-                int endByte = startByte + this.chunkSize;
+                long endByte = startByte + this.chunkSize;
                 DownloadCallable callable = new DownloadCallable(i, getDownloadUrl(), startByte, endByte);
                 futures.add(completionService.submit(callable));
                 startByte = endByte + 1;
@@ -147,7 +148,7 @@ public class Download {
             // download chunks sequentially
 
             for(int i = 0; i < chunks; i++) {
-                int endByte = startByte + this.chunkSize;
+                long endByte = startByte + getChunkSize() - 1;
 
                 DownloadCallable callable = new DownloadCallable(i, getDownloadUrl(), startByte, endByte);
                 Chunk chunk = null;
@@ -164,9 +165,11 @@ public class Download {
         LOGGER.log(Level.INFO, "Merging chunks");
 
         // merge chunks
-        byte[] finalResult = null;
-        for(byte[] download : downloads) {
-            finalResult = ArrayUtils.addAll(finalResult, download);
+        byte[] finalResult = downloads[0];
+        for(int i = 1; i < downloads.length; i++) {
+            byte[] joinedArray = Arrays.copyOf(finalResult, finalResult.length + downloads[i].length);
+            System.arraycopy(downloads[i], 0, joinedArray, finalResult.length, downloads[i].length);
+            finalResult = joinedArray;
         }
 
         LOGGER.log(Level.INFO, "Saving chunks to file");

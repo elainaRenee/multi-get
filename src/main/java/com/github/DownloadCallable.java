@@ -3,6 +3,7 @@ package com.github;
 import org.apache.commons.io.IOUtils;
 
 import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -21,10 +22,10 @@ public class DownloadCallable implements Callable<Chunk> {
 
     public final int position;
     public final URL url;
-    public final int startByte;
-    public final int endByte;
+    public final long startByte;
+    public final long endByte;
 
-    public DownloadCallable(int position, URL url, int startByte, int endByte) {
+    public DownloadCallable(int position, URL url, long startByte, long endByte) {
         this.position = position;
         this.url = url;
         this.startByte = startByte;
@@ -39,11 +40,11 @@ public class DownloadCallable implements Callable<Chunk> {
         return url;
     }
 
-    public int getStartByte() {
+    public long getStartByte() {
         return startByte;
     }
 
-    public int getEndByte() {
+    public long getEndByte() {
         return endByte;
     }
 
@@ -56,6 +57,8 @@ public class DownloadCallable implements Callable<Chunk> {
         LOGGER.log(Level.INFO, "Downloading chunk " + getPosition() + " starting at byte " + startByte + " and ending at byte " + endByte);
 
         byte[] chunkArray = null;
+        InputStream in = null;
+
         try {
             // Connect to the URL
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -65,18 +68,20 @@ public class DownloadCallable implements Callable<Chunk> {
             conn.setRequestProperty("Range", "bytes=" + byteRange);
 
             // get the input stream
-            InputStream in = conn.getInputStream();
+            in = conn.getInputStream();
 
             // get byte size
             long size = endByte - startByte;
 
-            chunkArray = IOUtils.toByteArray(in, size);
+            chunkArray = IOUtils.toByteArray(in);
 
         } catch (ConnectException e) {
             exitOnFatalError("Unable to connect to URL", e);
-
         } catch (Exception e) {
             exitOnFatalError("Error occurred in requesting chunk " + getPosition() + " from URL " + url, e);
+        } finally {
+            if (in != null)
+                in.close();
         }
 
         LOGGER.log(Level.INFO, "Finished downloading chunk " + getPosition() + " starting at byte " + startByte + " and ending at byte " + endByte);

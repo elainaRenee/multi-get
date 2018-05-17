@@ -70,9 +70,6 @@ public class DownloadCallable implements Callable<Chunk> {
             // get the input stream
             in = conn.getInputStream();
 
-            // get byte size
-            long size = endByte - startByte;
-
             chunkArray = IOUtils.toByteArray(in);
 
         } catch (ConnectException e) {

@@ -62,7 +62,7 @@ public class Main {
             cmd = parser.parse(options, args);
             // print help message if help argument is passed
             if (cmd.hasOption("help")) {
-                formatter.printHelp("java -jar multiget.jar [OPTIONS] <URL>", header, options, footer);
+                formatter.printHelp("java -jar multiget.jar <URL> [OPTIONS]", header, options, footer);
                 return;
             }
         } catch (ParseException e) {

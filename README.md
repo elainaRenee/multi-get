@@ -1,4 +1,4 @@
-# Multi-Get Coding Challenge- Elaina Hodgkin
+# Multi-Get Coding Challenge
 
 ## Task
 Build an application that downloads part of a file from a web server, in chunks.
